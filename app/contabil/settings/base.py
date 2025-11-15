@@ -8,6 +8,10 @@ from django_auth_ldap.config import LDAPSearch
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # Current project version
 PROJECT_VERSION = "v1.1"
@@ -26,7 +30,8 @@ DEBUG_PROPAGATE_EXCEPTIONS = bool(PROJECT_ENV != "production")
 
 ALLOWED_HOSTS = ["*"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))))
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
@@ -92,6 +97,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "contabil.wsgi.application"
 
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ==== DATABASE CONFIGURATIONS ==== #
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
@@ -109,7 +115,8 @@ MYSQL_DB = {
     "PORT": os.getenv("MYSQL_PORT"),
 }
 
-DATABASES = {"default": SQLITE_DB if not os.getenv("MYSQL_DATABASE") else MYSQL_DB}
+DATABASES = {"default": SQLITE_DB if not os.getenv(
+    "MYSQL_DATABASE") else MYSQL_DB}
 
 
 # ==== PASSWORD VALIDATION ==== #

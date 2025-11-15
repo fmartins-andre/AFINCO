@@ -1,6 +1,6 @@
 # pylint: disable=missing-module-docstring,missing-class-docstring,bad-super-call
 from django import forms
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 
 import django_filters
 
