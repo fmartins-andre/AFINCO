@@ -97,7 +97,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "contabil.wsgi.application"
 
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # ==== DATABASE CONFIGURATIONS ==== #
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
