@@ -1,16 +1,26 @@
-FROM python:3.6-alpine
+FROM python:3.9-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 
 WORKDIR /usr/src/app
 
-COPY ./app ./
-COPY ./Pipfile ./Pipfile
-COPY ./Pipfile.lock ./Pipfile.lock
+RUN apk --update --no-cache add \
+    build-base \
+    openldap-dev \
+    mariadb-connector-c-dev \
+    && rm -rf /var/cache/apk/*
 
-RUN if [ ! -d 'media' ]; then mkdir media; fi
-RUN if [ ! -d '/var/backups' ]; then mkdir /var/backups; fi
-RUN apk --update --no-cache add build-base openldap-dev python2-dev python3-dev mariadb-dev mariadb-client
-RUN pip install --upgrade pip
-RUN pip install pipenv
-RUN pipenv install --system --deploy --ignore-pipfile
+COPY app pyproject.toml uv.lock ./
 
-CMD [ "gunicorn", "contabil.wsgi", "-b", "0.0.0.0:8008" ]
+RUN mkdir -p media /var/backups
+
+RUN uv export --format requirements-txt > requirements.txt && uv pip install -r requirements.txt --system
+
+RUN  python -c "import django; print(f'Django version: {django.__version__}')"
+
+CMD ["python", "gunicorn", "contabil.wsgi", "-b", "0.0.0.0:8008" ]
+
+EXPOSE 8008
