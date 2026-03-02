@@ -1,16 +1,17 @@
 # pylint: disable=missing-module-docstring
-import os
 import logging
-from django.contrib.messages import constants as messages
+import os
 
 import ldap
-from django_auth_ldap.config import LDAPSearch
 import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
+from django.contrib.messages import constants as messages
+from django_auth_ldap.config import LDAPSearch
 
 # Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import find_dotenv, load_dotenv
+from sentry_sdk.integrations.django import DjangoIntegration
+
+load_dotenv(find_dotenv())
 
 
 # Current project version
@@ -30,8 +31,7 @@ DEBUG_PROPAGATE_EXCEPTIONS = bool(PROJECT_ENV != "production")
 
 ALLOWED_HOSTS = ["*"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
@@ -115,8 +115,7 @@ MYSQL_DB = {
     "PORT": os.getenv("MYSQL_PORT"),
 }
 
-DATABASES = {"default": SQLITE_DB if not os.getenv(
-    "MYSQL_DATABASE") else MYSQL_DB}
+DATABASES = {"default": SQLITE_DB if not os.getenv("MYSQL_DATABASE") else MYSQL_DB}
 
 
 # ==== PASSWORD VALIDATION ==== #

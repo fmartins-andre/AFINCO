@@ -28,27 +28,27 @@ AFinCo uses [django-dbbackup](https://github.com/django-dbbackup/django-dbbackup
 
 Create backup of database
 ```bash
-docker-compose exec django python manage.py dbbackup
+docker-compose exec django uv run manage.py dbbackup
 ```
 
 ### Database Restore
 
 Restore most recent backup
 ```bash
-docker-compose exec django python manage.py dbrestore
+docker-compose exec django uv run manage.py dbrestore
 ```
 
 ### Backup Management
 
 ```bash
 # List available backups
-docker-compose exec django python manage.py listbackups
+docker-compose exec django uv run manage.py listbackups
 
 # Show backup details
-docker-compose exec django python manage.py listbackups --detail
+docker-compose exec django uv run manage.py listbackups --detail
 
 # Clean old backups
-docker-compose exec django python manage.py clean_old_backups --days=30
+docker-compose exec django uv run manage.py clean_old_backups --days=30
 ```
 
 ## Docker volume backup and restore strategy

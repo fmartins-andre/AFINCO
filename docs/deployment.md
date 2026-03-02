@@ -42,7 +42,7 @@ docker-compose -f docker-compose.yml up -d
 
 ##### 7. If it's a new setup, you'll need to create the app super user.
 ```bash
-docker-compose -f docker-compose.yml exec django python manage.py createsuperuser
+docker-compose -f docker-compose.yml exec django uv run manage.py createsuperuser
 ```
 
 ##### 8. Test server response in your browser:

@@ -24,12 +24,12 @@ services:
     env_file:
       - ./env/development.env
     command: >
-      /bin/sh -c 'python manage.py makemigrations &&
-                  python manage.py migrate &&
-                  python manage.py collectstatic --noinput &&
-                  python manage.py compress --force &&
-                  python manage.py sync_roles --reset_user_permissions &&
-                  gunicorn contabil.wsgi -b "0.0.0.0:8008"'
+      /bin/sh -c 'uv run manage.py makemigrations &&
+                  uv run manage.py migrate &&
+                  uv run manage.py collectstatic --noinput &&
+                  uv run manage.py compress --force &&
+                  uv run manage.py sync_roles --reset_user_permissions &&
+                  uv run gunicorn contabil.wsgi -b "0.0.0.0:8008"'
     volumes:
       - ./app:/usr/src/app
       - ./app/db.sqlite3:/usr/src/app/db.sqlite3

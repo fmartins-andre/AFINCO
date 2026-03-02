@@ -17,7 +17,7 @@ touch env/development.env
 docker-compose -f docker-compose-stagging-sqlite.yml up -d
 
 # Create superuser
-docker-compose -f docker-compose-stagging-sqlite.yml exec django python manage.py createsuperuser
+docker-compose -f docker-compose-stagging-sqlite.yml exec django uv run manage.py createsuperuser
 ```
 
 Access at: `http://localhost:8008`
@@ -29,12 +29,12 @@ Access at: `http://localhost:8008`
 3. Install dependencies and setup database:
    ```bash
    uv sync
-   uv run app/python manage.py makemigrations
-   uv run app/python manage.py migrate
-   uv run app/python manage.py collectstatic --noinput
-   uv run app/python manage.py compress --force
-   uv run app/python manage.py sync_roles --reset_user_permissions
-   uv run app/python manage.py runserver
+   uv run app/manage.py makemigrations
+   uv run app/manage.py migrate
+   uv run app/manage.py collectstatic --noinput
+   uv run app/manage.py compress --force
+   uv run app/manage.py sync_roles --reset_user_permissions
+   uv run app/manage.py runserver
    ```
 
 ## Prerequisites
@@ -88,16 +88,16 @@ The dev container includes:
 
 3. **Database and app Setup**:
    ```bash
-   uv run app/python manage.py makemigrations
-   uv run app/python manage.py migrate
-   uv run app/python manage.py collectstatic --noinput
-   uv run app/python manage.py compress --force
-   uv run app/python manage.py sync_roles --reset_user_permissions
+   uv run app/manage.py makemigrations
+   uv run app/manage.py migrate
+   uv run app/manage.py collectstatic --noinput
+   uv run app/manage.py compress --force
+   uv run app/manage.py sync_roles --reset_user_permissions
    ```
 
 4. **Start Development Server**:
    ```bash
-   uv python app/manage.py runserver 0.0.0.0:8000
+   uv run app/manage.py runserver 0.0.0.0:8000
    ```
 
 
@@ -120,8 +120,8 @@ cp development.db app/db.sqlite3
 
 ```bash
 # From production MySQL
-docker-compose -f docker-compose.yml exec django python manage.py dumpdata --format=yaml > production_data.yaml
+docker-compose -f docker-compose.yml exec django uv run manage.py dumpdata --format=yaml > production_data.yaml
 
 # Import to SQLite
-python manage.py loaddata production_data.yaml
+uv run manage.py loaddata production_data.yaml
 ```

@@ -43,7 +43,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black",
+    "flake8-pyproject>=1.2.4",
     "pylint",
     "pylint-django",
     "rope",
 ]
+
+[tool.flake8]
+ignore = ['E501', 'F401']
+max-line-length = 120
