@@ -11,7 +11,10 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /workspace
 
 # Install additional system dependencies
-RUN apk --update --no-cache add bash curl git nodejs build-base openldap-dev cyrus-sasl-dev python3-dev mariadb-dev mariadb-client
+RUN apk --update --no-cache add \
+    bash curl git nodejs build-base openssh-client \
+    openldap-dev cyrus-sasl-dev python3-dev \
+    mariadb-dev mariadb-client
 
 RUN pip install --no-cache-dir uv
 
