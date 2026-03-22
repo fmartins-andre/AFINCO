@@ -1,12 +1,17 @@
 # pylint: disable=missing-module-docstring
-import os
 import logging
-from django.contrib.messages import constants as messages
+import os
 
 import ldap
-from django_auth_ldap.config import LDAPSearch
 import sentry_sdk
+from django.contrib.messages import constants as messages
+from django_auth_ldap.config import LDAPSearch
+
+# Load environment variables from .env file
+from dotenv import find_dotenv, load_dotenv
 from sentry_sdk.integrations.django import DjangoIntegration
+
+load_dotenv(find_dotenv())
 
 
 # Current project version
@@ -92,6 +97,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "contabil.wsgi.application"
 
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # ==== DATABASE CONFIGURATIONS ==== #
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases

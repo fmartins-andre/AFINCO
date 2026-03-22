@@ -1,16 +1,23 @@
-FROM python:3.6-alpine
+FROM python:3.9-alpine3.22
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /usr/src/app
 
-COPY ./app ./
-COPY ./Pipfile ./Pipfile
-COPY ./Pipfile.lock ./Pipfile.lock
+RUN apk --update --no-cache add \
+    build-base openldap-dev cyrus-sasl-dev \
+    python3-dev mariadb-dev mariadb-client \
+    && rm -rf /var/cache/apk/*
 
-RUN if [ ! -d 'media' ]; then mkdir media; fi
-RUN if [ ! -d '/var/backups' ]; then mkdir /var/backups; fi
-RUN apk --update --no-cache add build-base openldap-dev python2-dev python3-dev mariadb-dev mariadb-client
-RUN pip install --upgrade pip
-RUN pip install pipenv
-RUN pipenv install --system --deploy --ignore-pipfile
+RUN pip install --no-cache-dir uv
 
-CMD [ "gunicorn", "contabil.wsgi", "-b", "0.0.0.0:8008" ]
+COPY app pyproject.toml uv.lock ./
+
+RUN mkdir -p media /var/backups
+
+RUN uv export --format requirements-txt > requirements.txt && uv pip install -r requirements.txt --system
+
+CMD ["uv", "run", "gunicorn", "contabil.wsgi", "-b", "0.0.0.0:8008" ]
+
+EXPOSE 8008
