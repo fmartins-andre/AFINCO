@@ -29,4 +29,4 @@ USER $USER
 
 WORKDIR /workspace
 
-RUN pip install --no-cache-dir uv
+RUN pip install --upgrade --no-cache-dir pip && curl -LsSf https://astral.sh/uv/install.sh | sh
