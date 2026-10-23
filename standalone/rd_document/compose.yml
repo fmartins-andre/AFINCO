@@ -1,0 +1,7 @@
+services:
+  rd_document:
+    build: .
+    image: rd_document
+    env_file: .env
+    volumes:
+      - ./saida:/app/saida
