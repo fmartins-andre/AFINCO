@@ -3,21 +3,69 @@
 Versão standalone do relatório de receitas do AFINCO (`app/relatorios/_make_rd_txt_file.py`).
 Lê do banco `document` (TD / PJ / Certidões) e gera um TXT no mesmo layout, só com receitas.
 
-## Uso
+## Para o usuário final
 
-```bash
-cp .env.example .env    # preencher DB_USER e DB_PASSWORD
-docker compose run --rm rd_document 2026-10-01 2026-10-31
-```
+Baixe o pacote do sistema na página de **Releases** do GitHub (`RelatorioReceitas-<versão>-windows.zip` ou `-linux.tar.gz`), extraia e siga o `LEIA-ME.txt`. Cada pacote traz dois executáveis:
 
-O arquivo sai em `./saida/RecDoc_<ini>.<fim>.txt`.
+- `RelatorioReceitas`: janela para escolher o período e gerar o relatório;
+- `RelatorioReceitas-Terminal`: o mesmo no terminal, interativo, ou direto com `01/10/2026 31/10/2026`.
 
-Sem Docker:
+Na primeira execução, o programa pergunta servidor, porta, usuário e senha, testa a conexão e cria o `config.ini` na pasta do programa. O TXT e o `relatorio.log` (erros) também ficam nessa pasta.
+
+## Configuração (`config.ini`)
+
+Tudo que é configurável fica no `config.ini`. Só o SQL fica embutido no programa. O modelo é o [config.exemplo.ini](config.exemplo.ini):
+
+| Seção | Conteúdo |
+|---|---|
+| `[banco]` | host, porta, usuário e senha (preenchidos pelo programa na primeira execução) |
+| `[saida]` | pasta do TXT (vazio = pasta do programa) |
+| `[contas]` | contas contábeis (7 dígitos) |
+| `[prefixos]` | prefixo do documento por tipo (2 dígitos, sem repetir) |
+| `[siglas]` | sigla do histórico quando difere do tipo (`EX = ED`) |
+
+## Desenvolvimento
+
+| Arquivo | Papel |
+|---|---|
+| `rd_document.py` | núcleo: config, consulta, layout do TXT |
+| `rd_document.sql` | query (parâmetros `%(data_ini)s` e `%(data_fim)s`) |
+| `janela.py` | interface em janela (Tkinter) |
+| `terminal.py` | interface de terminal |
+| `empacotar.py` | gera executáveis e pacote (PyInstaller) |
+| `distribuicao/` | LEIA-ME e atalho `.desktop` que vão no pacote |
 
 ```bash
 pip install pymysql==1.1.1
-DB_USER=... DB_PASSWORD=... python rd_document.py 2026-10-01 2026-10-31 --saida ./saida
+python janela.py                              # janela
+python terminal.py                            # terminal interativo
+python terminal.py 01/10/2026 31/10/2026      # direto
 ```
+
+O Python precisa ter Tkinter para a janela (no Linux, pacote `python3-tkinter` ou `python3-tk`).
+
+Com Docker (só modo terminal; `config.ini`, log e TXT ficam em `./dados`):
+
+```bash
+docker compose run --rm rd_document                          # interativo
+docker compose run --rm rd_document 01/10/2026 31/10/2026
+```
+
+## Empacotamento e publicação
+
+O workflow [`.github/workflows/rd-document.yml`](../../.github/workflows/rd-document.yml) compila no Windows e no Ubuntu 22.04.
+
+- **Publicar uma versão**: criar e enviar uma tag `rd-document-vX.Y.Z`. Os pacotes são anexados a uma Release.
+- **Testar sem publicar**: rodar o workflow manualmente (Actions → rd-document → Run workflow). Os pacotes ficam como artefatos do run.
+
+Localmente, gera o pacote do sistema atual em `dist/`:
+
+```bash
+pip install pymysql==1.1.1 pyinstaller==6.11.1
+python empacotar.py v1.0.0
+```
+
+O executável Windows não é assinado. Na primeira execução, o SmartScreen mostra um aviso, e o LEIA-ME explica como seguir.
 
 ## O que entra
 

@@ -1,0 +1,51 @@
+RELATÓRIO DE RECEITAS - ESCRIBA DOCUMENT
+=========================================
+
+Gera o arquivo de receitas (TXT) para a contabilidade a partir do
+sistema de Títulos e Documentos, Pessoa Jurídica e Certidões.
+
+
+COMO USAR
+---------
+
+1. Extraia (descompacte) esta pasta em um local fixo do computador,
+   por exemplo em "Documentos". Não use o programa de dentro do ZIP.
+
+2. Dê dois cliques em "RelatorioReceitas.exe".
+
+3. Na primeira vez, o Windows pode mostrar a mensagem
+   "O Windows protegeu o computador". Clique em "Mais informações"
+   e depois em "Executar assim mesmo". Isso só acontece uma vez.
+
+4. Também na primeira vez, o programa abre a tela
+   "Configurar banco de dados". Preencha servidor, usuário e senha
+   (peça esses dados à TI) e clique em "Testar e salvar".
+
+5. Confira as datas (já vêm preenchidas com o mês anterior) e
+   clique em "Gerar relatório".
+
+6. O arquivo "RecDoc_....txt" é gravado nesta mesma pasta.
+   O botão "Abrir pasta do relatório" mostra onde ele está.
+
+
+SE ALGO DER ERRADO
+------------------
+
+- A mensagem de erro explica o problema. Os detalhes também ficam
+  gravados no arquivo "relatorio.log", nesta pasta. Envie esse
+  arquivo para a TI se precisar de ajuda.
+
+- Para trocar os dados do banco, use o botão "Configurar banco...".
+
+- As configurações ficam no arquivo "config.ini", nesta pasta.
+  Não altere esse arquivo sem orientação.
+
+
+OUTRA FORMA DE USAR (TERMINAL)
+------------------------------
+
+"RelatorioReceitas-Terminal.exe" faz o mesmo em uma janela de texto:
+pergunta os dados e o período e gera o arquivo. Também pode ser
+usado em scripts:
+
+    RelatorioReceitas-Terminal.exe 01/10/2026 31/10/2026

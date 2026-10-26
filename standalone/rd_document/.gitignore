@@ -1,1 +1,6 @@
-saida/
+build/
+dist/
+dados/
+config.ini
+relatorio.log
+RecDoc_*.txt

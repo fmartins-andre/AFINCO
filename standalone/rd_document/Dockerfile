@@ -7,6 +7,7 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir pymysql==1.1.1
 
-COPY rd_document.py rd_document.sql ./
+COPY rd_document.py terminal.py rd_document.sql config.exemplo.ini ./
 
-ENTRYPOINT ["python", "rd_document.py", "--saida", "/app/saida"]
+# config.ini, relatorio.log e os TXT ficam no volume /dados
+ENTRYPOINT ["python", "terminal.py", "--config", "/dados/config.ini"]

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Relatório de Receitas
+Comment=Gera o relatório de receitas do Escriba Document
+Exec=sh -c 'cd "$(dirname "%k")" && ./RelatorioReceitas'
+Icon=x-office-document
+Terminal=false
+Categories=Office;
