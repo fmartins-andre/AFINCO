@@ -94,7 +94,12 @@ def em_segundo_plano(janela, tarefa, ao_avancar, ao_terminar):
 
 
 def mostrar_erro(janela, erro):
-    if isinstance(erro, rd.ErroRelatorio):
+    if isinstance(erro, rd.ConsultaDemorada):
+        if messagebox.askyesno(
+            TITULO, f'{erro}\n\nDeseja abrir a pasta do arquivo de diagnóstico?', icon='warning', parent=janela,
+        ):
+            abrir_pasta(erro.diagnostico.parent)
+    elif isinstance(erro, rd.ErroRelatorio):
         rd.log.error('%s', erro)
         messagebox.showerror(TITULO, str(erro), parent=janela)
     else:

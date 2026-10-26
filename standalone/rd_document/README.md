@@ -24,6 +24,20 @@ Tudo que é configurável fica no `config.ini`. Só o SQL fica embutido no progr
 | `[prefixos]` | prefixo do documento por tipo (2 dígitos, sem repetir) |
 | `[siglas]` | sigla do histórico quando difere do tipo (`EX = ED`) |
 
+## Proteção do banco de dados
+
+Cada conexão é aberta com:
+
+- `max_execution_time = 90000`: o **próprio servidor** interrompe qualquer SELECT acima de 90 s e libera os recursos (requer MySQL 5.7.8+);
+- `transaction_read_only = 1`: a sessão não grava nada, mesmo que o usuário tenha permissão;
+- `transaction_isolation = READ-COMMITTED`: não mantém uma visão antiga dos dados aberta.
+
+Se o servidor não interromper, o cliente desiste aos 105 s e executa `KILL QUERY` por outra conexão, para a consulta não continuar rodando sozinha.
+
+Quando o limite estoura, o programa grava `diagnostico_consulta_<data>.txt` na pasta do programa e orienta o usuário a reduzir o período ou procurar o suporte. O arquivo traz período, tempo, erro, versão do MySQL, `EXPLAIN` e o SQL com os parâmetros. A senha não vai no arquivo.
+
+Os limites ficam em `rd_document.py`: `LIMITE_CONSULTA`, `FOLGA_CLIENTE` e `TEMPO_CONEXAO`.
+
 ## Desenvolvimento
 
 | Arquivo | Papel |

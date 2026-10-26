@@ -10,6 +10,7 @@ config.ini; só o SQL fica embutido no programa.
 """
 import configparser
 import logging
+import platform
 import re
 import sys
 import time
@@ -30,9 +31,14 @@ CONTAS = ('caixa', 'servico', 'devolucao', 'deposito_previo', 'emolumento')
 
 NOMES_HP = {1: 'receitas caixa', 6: 'devoluções caixa', 4: 'emolumentos selados'}
 
-# segundos: tempo máximo para o servidor aceitar a conexão / responder a consulta
-TEMPO_CONEXAO = 10
-TEMPO_CONSULTA = 300
+# segundos
+TEMPO_CONEXAO = 10    # para o servidor aceitar a conexão
+LIMITE_CONSULTA = 90  # duração máxima de cada consulta (interrompida no servidor)
+FOLGA_CLIENTE = 15    # o cliente desiste um pouco depois, caso o servidor não interrompa
+
+# códigos de erro do MySQL
+ER_QUERY_TIMEOUT = 3024  # max_execution_time estourado
+CR_SERVER_LOST = 2013    # conexão perdida durante a consulta (inclui timeout do cliente)
 
 
 class ErroRelatorio(Exception):
@@ -41,6 +47,14 @@ class ErroRelatorio(Exception):
 
 class ConfigAusente(ErroRelatorio):
     """O config.ini ainda não existe: é preciso perguntar os dados do banco."""
+
+
+class ConsultaDemorada(ErroRelatorio):
+    """A consulta passou do limite e foi interrompida; `diagnostico` aponta o report gerado."""
+
+    def __init__(self, mensagem, diagnostico):
+        super().__init__(mensagem)
+        self.diagnostico = diagnostico
 
 
 def pasta_do_programa():
@@ -62,6 +76,7 @@ class Config:
     usuario: str
     senha: str
     pasta_saida: Path
+    pasta_config: Path  # onde ficam config.ini, relatorio.log e diagnósticos
     contas: dict
     prefixos: dict
     siglas: dict = field(default_factory=dict)
@@ -79,7 +94,15 @@ def sem_progresso(etapa):
     pass
 
 
-def conectar(host, porta, usuario, senha):
+def conectar(host, porta, usuario, senha, limite=None):
+    """
+    Abre uma sessão protegida para não pesar no banco:
+    - max_execution_time: o próprio servidor interrompe qualquer SELECT
+      que passe do limite e libera os recursos;
+    - somente leitura e READ COMMITTED: nada é gravado e não se mantém
+      uma visão antiga dos dados aberta.
+    """
+    limite = LIMITE_CONSULTA if limite is None else limite
     try:
         return pymysql.connect(
             host=host,
@@ -88,7 +111,14 @@ def conectar(host, porta, usuario, senha):
             password=senha,
             charset='utf8mb4',
             connect_timeout=TEMPO_CONEXAO,
-            read_timeout=TEMPO_CONSULTA,
+            read_timeout=limite + FOLGA_CLIENTE,
+            write_timeout=limite + FOLGA_CLIENTE,
+            autocommit=True,
+            init_command=(
+                f'SET SESSION max_execution_time = {int(limite * 1000)}, '
+                'SESSION transaction_read_only = 1, '
+                "SESSION transaction_isolation = 'READ-COMMITTED'"
+            ),
         )
     except (pymysql.err.OperationalError, pymysql.err.InternalError) as e:
         raise ErroRelatorio(
@@ -223,6 +253,7 @@ def carregar_config(arquivo):
         usuario=valor('banco', 'usuario'),
         senha=parser.get('banco', 'senha', fallback='').strip(),
         pasta_saida=Path(pasta) if pasta else arquivo.resolve().parent,
+        pasta_config=arquivo.resolve().parent,
         contas=contas,
         prefixos=prefixos,
         siglas=siglas,
@@ -274,24 +305,106 @@ def lancamentos(config, row):
 
 
 def consultar(config, data_ini, data_fim, progresso=sem_progresso):
+    sql = recurso('rd_document.sql').read_text(encoding='utf-8')
+    parametros = {'data_ini': data_ini.isoformat(), 'data_fim': data_fim.isoformat()}
+
     progresso('Conectando ao banco de dados...')
     conexao = conectar(config.host, config.porta, config.usuario, config.senha)
+    inicio = time.monotonic()
     try:
-        progresso('Consultando os lançamentos no banco...')
+        progresso(f'Consultando os lançamentos no banco (limite de {LIMITE_CONSULTA} s)...')
         with conexao.cursor() as cursor:
-            cursor.execute(
-                recurso('rd_document.sql').read_text(encoding='utf-8'),
-                {'data_ini': data_ini.isoformat(), 'data_fim': data_fim.isoformat()},
-            )
+            cursor.execute(sql, parametros)
             return cursor.fetchall()
     except pymysql.err.MySQLError as e:
+        decorrido = time.monotonic() - inicio
+        codigo = e.args[0] if e.args else None
+        if codigo == ER_QUERY_TIMEOUT or (codigo == CR_SERVER_LOST and decorrido >= LIMITE_CONSULTA):
+            if codigo != ER_QUERY_TIMEOUT:  # quem desistiu foi o cliente: garante que o servidor pare
+                interromper_no_servidor(config, conexao.thread_id())
+            progresso('Gerando relatório de diagnóstico...')
+            diagnostico = gerar_diagnostico(config, data_ini, data_fim, decorrido, e, sql, parametros)
+            raise ConsultaDemorada(
+                f'A consulta ao banco passou do limite de {LIMITE_CONSULTA} segundos e foi '
+                'interrompida, sem prejuízo para o banco de dados.\n\n'
+                'Tente gerar o relatório com um período menor (por exemplo, um mês por vez).\n'
+                'Se o problema continuar, procure o suporte e envie o arquivo de diagnóstico:\n'
+                f'{diagnostico}',
+                diagnostico,
+            )
         raise ErroRelatorio(
-            'O banco de dados não respondeu à consulta (a conexão caiu ou '
-            f'demorou mais de {TEMPO_CONSULTA // 60} minutos).\n'
+            'O banco de dados não respondeu à consulta (a conexão caiu).\n'
             f'Tente novamente; se continuar, avise a TI.\n\nDetalhe: {e}'
         )
     finally:
         conexao.close()
+
+
+def interromper_no_servidor(config, id_conexao):
+    """KILL QUERY por outra conexão, para a consulta abandonada não continuar rodando."""
+    try:
+        conexao = conectar(config.host, config.porta, config.usuario, config.senha, limite=10)
+        try:
+            with conexao.cursor() as cursor:
+                cursor.execute(f'KILL QUERY {int(id_conexao)}')
+        finally:
+            conexao.close()
+        log.warning('Consulta %s interrompida no servidor (KILL QUERY).', id_conexao)
+    except Exception:
+        log.exception('Não foi possível interromper a consulta %s no servidor.', id_conexao)
+
+
+def gerar_diagnostico(config, data_ini, data_fim, decorrido, erro, sql, parametros):
+    """
+    Grava um report para o suporte analisar a consulta lenta: contexto,
+    erro, plano de execução (EXPLAIN) e o SQL com os parâmetros.
+    Não inclui a senha.
+    """
+    agora = datetime.now()
+    arquivo = config.pasta_config / f'diagnostico_consulta_{agora:%Y-%m-%d_%H%M%S}.txt'
+
+    versao, plano, sql_final = '(não obtida)', '(não obtido)', sql
+    try:
+        conexao = conectar(config.host, config.porta, config.usuario, config.senha, limite=20)
+        try:
+            with conexao.cursor() as cursor:
+                sql_final = cursor.mogrify(sql, parametros)
+                cursor.execute('SELECT VERSION()')
+                versao = cursor.fetchone()[0]
+                cursor.execute('EXPLAIN ' + sql_final)  # só o plano: não executa a consulta
+                colunas = [c[0] for c in cursor.description]
+                plano = '\n'.join(
+                    ' | '.join(f'{c}={v}' for c, v in zip(colunas, linha) if v is not None)
+                    for linha in cursor.fetchall()
+                )
+        finally:
+            conexao.close()
+    except Exception as e:
+        plano = f'(não obtido: {e})'
+
+    secoes = [
+        'DIAGNÓSTICO — CONSULTA ACIMA DO LIMITE DE TEMPO',
+        '=' * 60,
+        f'Data/hora:          {agora:%d/%m/%Y %H:%M:%S}',
+        f'Período pedido:     {data_ini:%d/%m/%Y} a {data_fim:%d/%m/%Y} ({(data_fim - data_ini).days + 1} dias)',
+        f'Tempo até parar:    {formatar_tempo(decorrido)} (limite: {LIMITE_CONSULTA} s)',
+        f'Erro:               {erro}',
+        f'Servidor:           {config.host}:{config.porta} (usuário {config.usuario})',
+        f'Versão do MySQL:    {versao}',
+        f'Computador:         {platform.platform()} / Python {platform.python_version()}',
+        '',
+        'PLANO DE EXECUÇÃO (EXPLAIN)',
+        '-' * 60,
+        plano,
+        '',
+        'SQL EXECUTADO',
+        '-' * 60,
+        sql_final.strip(),
+        '',
+    ]
+    arquivo.write_text('\n'.join(secoes), encoding='utf-8')
+    log.warning('Consulta acima do limite (%s a %s, %.1f s). Diagnóstico: %s', data_ini, data_fim, decorrido, arquivo)
+    return arquivo
 
 
 def arquivo_saida(config, data_ini, data_fim):
