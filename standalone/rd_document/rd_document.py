@@ -12,6 +12,7 @@ import configparser
 import logging
 import re
 import sys
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -28,6 +29,10 @@ CONFIG_NOME = 'config.ini'
 CONTAS = ('caixa', 'servico', 'devolucao', 'deposito_previo', 'emolumento')
 
 NOMES_HP = {1: 'receitas caixa', 6: 'devoluções caixa', 4: 'emolumentos selados'}
+
+# segundos: tempo máximo para o servidor aceitar a conexão / responder a consulta
+TEMPO_CONEXAO = 10
+TEMPO_CONSULTA = 300
 
 
 class ErroRelatorio(Exception):
@@ -67,6 +72,11 @@ class Resultado:
     arquivo: Path
     linhas: int
     resumo: dict  # hp -> (quantidade, total)
+    segundos: float
+
+
+def sem_progresso(etapa):
+    pass
 
 
 def conectar(host, porta, usuario, senha):
@@ -77,7 +87,8 @@ def conectar(host, porta, usuario, senha):
             user=usuario,
             password=senha,
             charset='utf8mb4',
-            connect_timeout=10,
+            connect_timeout=TEMPO_CONEXAO,
+            read_timeout=TEMPO_CONSULTA,
         )
     except (pymysql.err.OperationalError, pymysql.err.InternalError) as e:
         raise ErroRelatorio(
@@ -262,25 +273,42 @@ def lancamentos(config, row):
         raise ValueError(f'Histórico padrão desconhecido: {hp}')
 
 
-def consultar(config, data_ini, data_fim):
+def consultar(config, data_ini, data_fim, progresso=sem_progresso):
+    progresso('Conectando ao banco de dados...')
     conexao = conectar(config.host, config.porta, config.usuario, config.senha)
     try:
+        progresso('Consultando os lançamentos no banco...')
         with conexao.cursor() as cursor:
             cursor.execute(
                 recurso('rd_document.sql').read_text(encoding='utf-8'),
                 {'data_ini': data_ini.isoformat(), 'data_fim': data_fim.isoformat()},
             )
             return cursor.fetchall()
+    except pymysql.err.MySQLError as e:
+        raise ErroRelatorio(
+            'O banco de dados não respondeu à consulta (a conexão caiu ou '
+            f'demorou mais de {TEMPO_CONSULTA // 60} minutos).\n'
+            f'Tente novamente; se continuar, avise a TI.\n\nDetalhe: {e}'
+        )
     finally:
         conexao.close()
 
 
-def gerar(config, data_ini, data_fim):
-    """Consulta o banco e grava o TXT. Retorna o Resultado."""
+def arquivo_saida(config, data_ini, data_fim):
+    return config.pasta_saida / f'RecDoc_{data_ini}.{data_fim}.txt'
+
+
+def gerar(config, data_ini, data_fim, progresso=sem_progresso):
+    """
+    Consulta o banco e grava o TXT. Retorna o Resultado.
+    `progresso(etapa)` é chamado a cada etapa, para a interface mostrar.
+    """
     if data_fim < data_ini:
         raise ErroRelatorio('A data final é anterior à data inicial.')
 
-    rows = consultar(config, data_ini, data_fim)
+    inicio = time.monotonic()
+    rows = consultar(config, data_ini, data_fim, progresso)
+    progresso(f'Gravando o arquivo ({len(rows)} lançamentos)...')
 
     invalidos = [r for r in rows if r[3] is None or r[2] not in config.prefixos]
     if invalidos:
@@ -296,12 +324,12 @@ def gerar(config, data_ini, data_fim):
     if not rows:
         raise ErroRelatorio('Não foram encontrados lançamentos no período informado.')
 
-    config.pasta_saida.mkdir(parents=True, exist_ok=True)
-    arquivo = config.pasta_saida / f'RecDoc_{data_ini}.{data_fim}.txt'
+    arquivo = arquivo_saida(config, data_ini, data_fim)
 
     resumo = defaultdict(lambda: [0, Decimal('0')])
     qtd_linhas = 0
     try:
+        config.pasta_saida.mkdir(parents=True, exist_ok=True)
         with open(arquivo, 'w', encoding='ascii', newline='') as f:
             for row in rows:
                 resumo[row[1]][0] += 1
@@ -311,10 +339,21 @@ def gerar(config, data_ini, data_fim):
                     qtd_linhas += 1
     except PermissionError:
         raise ErroRelatorio(f'Não foi possível gravar {arquivo}.\nO arquivo pode estar aberto em outro programa.')
+    except OSError as e:
+        raise ErroRelatorio(f'Não foi possível gravar {arquivo}.\nVerifique a pasta de saída no config.ini.\n\nDetalhe: {e}')
 
-    resultado = Resultado(arquivo, qtd_linhas, {hp: tuple(v) for hp, v in resumo.items()})
-    log.info('Relatório %s a %s gerado: %s (%s linhas)', data_ini, data_fim, arquivo, qtd_linhas)
+    segundos = time.monotonic() - inicio
+    resultado = Resultado(arquivo, qtd_linhas, {hp: tuple(v) for hp, v in resumo.items()}, segundos)
+    log.info('Relatório %s a %s gerado: %s (%s linhas, %.1f s)', data_ini, data_fim, arquivo, qtd_linhas, segundos)
     return resultado
+
+
+def formatar_tempo(segundos):
+    """3.42 -> '3,4 s'; 65 -> '1 min 05 s'"""
+    if segundos < 60:
+        return f'{segundos:.1f} s'.replace('.', ',')
+    minutos, resto = divmod(int(segundos), 60)
+    return f'{minutos} min {resto:02d} s'
 
 
 def moeda(valor):
@@ -323,7 +362,10 @@ def moeda(valor):
 
 
 def formatar_resumo(resultado):
-    linhas = [f'Arquivo: {resultado.arquivo}', f'Linhas no TXT: {resultado.linhas}']
+    linhas = [
+        f'Arquivo: {resultado.arquivo}',
+        f'Linhas no TXT: {resultado.linhas}   (concluído em {formatar_tempo(resultado.segundos)})',
+    ]
     for hp in (1, 6, 4):
         if hp in resultado.resumo:
             qtd, total = resultado.resumo[hp]

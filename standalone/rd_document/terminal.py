@@ -12,9 +12,58 @@ conexão e cria o arquivo.
 import argparse
 import getpass
 import sys
+import threading
+import time
 from pathlib import Path
 
 import rd_document as rd
+
+
+class Carregando:
+    """
+    Mostra a etapa atual com um indicador giratório e o tempo decorrido
+    enquanto espera o banco. Usado como callback de progresso do núcleo.
+    """
+
+    QUADROS = '|/-\\'
+
+    def __init__(self, etapa=''):
+        self.etapa = etapa
+        self.inicio = time.monotonic()
+        self.animado = sys.stdout.isatty()
+        self._parar = threading.Event()
+        self._largura = 0
+        self._thread = threading.Thread(target=self._girar, daemon=True)
+
+    def __enter__(self):
+        if self.animado:
+            self._thread.start()
+        elif self.etapa:
+            print(self.etapa)
+        return self
+
+    def __call__(self, etapa):
+        self.etapa = etapa
+        if not self.animado:
+            print(etapa)
+
+    def _girar(self):
+        i = 0
+        while not self._parar.wait(0.1):
+            decorrido = rd.formatar_tempo(time.monotonic() - self.inicio)
+            texto = f'{self.QUADROS[i % 4]} {self.etapa} {decorrido}'
+            self._largura = max(self._largura, len(texto))
+            sys.stdout.write('\r' + texto.ljust(self._largura))
+            sys.stdout.flush()
+            i += 1
+
+    def __exit__(self, *_):
+        self._parar.set()
+        if self.animado:
+            self._thread.join()
+            sys.stdout.write('\r' + ' ' * self._largura + '\r')
+            sys.stdout.flush()
+        return False
 
 
 def perguntar(rotulo, padrao=''):
@@ -31,9 +80,10 @@ def configurar(arquivo):
         usuario = perguntar('Usuário')
         senha = getpass.getpass('Senha: ')
 
-        print('\nTestando a conexão...')
+        print()
         try:
-            rd.testar_conexao(host, porta, usuario, senha)
+            with Carregando('Testando a conexão...'):
+                rd.testar_conexao(host, porta, usuario, senha)
         except rd.ErroRelatorio as e:
             print(f'\n{e}\n')
             if perguntar('Tentar novamente? (S/N)', 'S').upper().startswith('N'):
@@ -73,9 +123,17 @@ def executar(args):
         data_ini, data_fim = rd.ler_data(args.data_ini), rd.ler_data(args.data_fim)
     else:
         data_ini, data_fim = perguntar_periodo()
+        arquivo_txt = rd.arquivo_saida(config, data_ini, data_fim)
+        if arquivo_txt.exists() and perguntar(
+            f'\nO arquivo {arquivo_txt.name} já existe. Substituir? (S/N)', 'S',
+        ).upper().startswith('N'):
+            raise rd.ErroRelatorio('Relatório não gerado: o arquivo existente foi mantido.')
 
-    print(f'\nGerando relatório de {data_ini:%d/%m/%Y} a {data_fim:%d/%m/%Y}...')
-    print(rd.formatar_resumo(rd.gerar(config, data_ini, data_fim)))
+    print(f'\nRelatório de {data_ini:%d/%m/%Y} a {data_fim:%d/%m/%Y}')
+    with Carregando() as carregando:
+        resultado = rd.gerar(config, data_ini, data_fim, carregando)
+    print('Relatório gerado com sucesso.')
+    print(rd.formatar_resumo(resultado))
 
 
 def main():
