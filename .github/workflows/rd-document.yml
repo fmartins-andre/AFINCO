@@ -1,10 +1,15 @@
 # Empacota o relatório standalone do Escriba Document (standalone/rd_document)
-# para Windows e Linux. Em tags rd-document-v*, publica os pacotes numa Release.
+# para Windows e Linux. Em push de branch, os pacotes ficam como artefatos do
+# run; em tags rd-document-v*, também são publicados numa Release.
 name: rd-document
 
 on:
   push:
-    tags: ['rd-document-v*']
+    branches: ['**']
+    paths:
+      - 'standalone/rd_document/**'
+      - '.github/workflows/rd-document.yml'
+    tags: ['rd-document-v*']  # filtros de paths não se aplicam a tags
   workflow_dispatch:
 
 permissions:
