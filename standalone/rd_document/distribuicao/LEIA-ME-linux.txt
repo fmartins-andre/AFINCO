@@ -25,8 +25,10 @@ COMO USAR
 4. Confira as datas (já vêm preenchidas com o mês anterior) e
    clique em "Gerar relatório".
 
-5. O arquivo "RecDoc_....txt" é gravado nesta mesma pasta.
-   O botão "Abrir pasta do relatório" mostra onde ele está.
+5. O arquivo "RecDoc_....txt" é gravado nesta mesma pasta e abre
+   automaticamente em uma janela para conferência. Nela, o botão
+   "Copiar todo o texto" copia o conteúdo e "Abrir pasta" mostra
+   onde o arquivo está. O botão "Ver relatório" reabre essa janela.
 
 
 SE ALGO DER ERRADO

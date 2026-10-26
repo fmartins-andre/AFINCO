@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import font, messagebox, ttk
 
 import rd_document as rd
 
@@ -112,8 +112,76 @@ def mostrar_erro(janela, erro):
 def abrir_pasta(pasta):
     if sys.platform == 'win32':
         os.startfile(pasta)
-    else:
-        subprocess.Popen(['xdg-open', str(pasta)])
+        return
+    # O executável do PyInstaller troca o LD_LIBRARY_PATH pelas bibliotecas
+    # embutidas; programas do sistema (xdg-open, gerenciador de arquivos)
+    # precisam do ambiente original para não falhar.
+    ambiente = dict(os.environ)
+    if getattr(sys, 'frozen', False):
+        original = ambiente.pop('LD_LIBRARY_PATH_ORIG', None)
+        if original is None:
+            ambiente.pop('LD_LIBRARY_PATH', None)
+        else:
+            ambiente['LD_LIBRARY_PATH'] = original
+    subprocess.Popen(['xdg-open', str(pasta)], env=ambiente)
+
+
+class VisualizadorRelatorio(tk.Toplevel):
+    """
+    Mostra o TXT gerado, somente leitura (o arquivo contábil não pode ser
+    alterado sem querer), com fonte de largura fixa e botão de copiar tudo.
+    """
+
+    def __init__(self, pai, resultado):
+        super().__init__(pai)
+        self.resultado = resultado
+        self.title(f'Relatório gerado — {resultado.arquivo.name}')
+        self.minsize(560, 300)
+
+        # o arquivo usa CRLF; o \r apareceria como símbolo no widget
+        texto = resultado.arquivo.read_text(encoding='ascii').replace('\r\n', '\n')
+
+        topo = ttk.Frame(self, padding=(12, 12, 12, 6))
+        topo.pack(fill='x')
+        ttk.Label(topo, text=rd.formatar_resumo(resultado), justify='left').pack(anchor='w')
+
+        quadro = ttk.Frame(self, padding=(12, 0))
+        quadro.pack(fill='both', expand=True)
+        self.texto = tk.Text(
+            quadro, wrap='none', width=84, height=24, font=font.nametofont('TkFixedFont'),
+            undo=False, borderwidth=1, relief='solid',
+        )
+        rolagem_v = ttk.Scrollbar(quadro, orient='vertical', command=self.texto.yview)
+        rolagem_h = ttk.Scrollbar(quadro, orient='horizontal', command=self.texto.xview)
+        self.texto.configure(yscrollcommand=rolagem_v.set, xscrollcommand=rolagem_h.set)
+        self.texto.grid(row=0, column=0, sticky='nsew')
+        rolagem_v.grid(row=0, column=1, sticky='ns')
+        rolagem_h.grid(row=1, column=0, sticky='we')
+        quadro.rowconfigure(0, weight=1)
+        quadro.columnconfigure(0, weight=1)
+
+        self.texto.insert('1.0', texto)
+        self.texto.configure(state='disabled')  # somente leitura; seleção e Ctrl+C continuam funcionando
+
+        botoes = ttk.Frame(self, padding=12)
+        botoes.pack(fill='x')
+        self.botao_copiar = ttk.Button(botoes, text='Copiar todo o texto', command=self.copiar)
+        self.botao_copiar.pack(side='left')
+        ttk.Button(botoes, text='Abrir pasta', command=lambda: abrir_pasta(resultado.arquivo.parent)).pack(
+            side='left', padx=(6, 0))
+        self.aviso = ttk.Label(botoes, text='', foreground=COR_OK)
+        self.aviso.pack(side='left', padx=(12, 0))
+        ttk.Button(botoes, text='Fechar', command=self.destroy).pack(side='right')
+
+        self.bind('<Escape>', lambda _: self.destroy())
+        self.focus_set()
+
+    def copiar(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.texto.get('1.0', 'end-1c'))
+        self.update()  # entrega o conteúdo à área de transferência do sistema
+        self.aviso.config(text=f'✔ {self.resultado.linhas} linhas copiadas')
+        self.after(3000, lambda: self.aviso.winfo_exists() and self.aviso.config(text=''))
 
 
 class TelaBanco(tk.Toplevel):
@@ -194,7 +262,7 @@ class Aplicativo(tk.Tk):
     def __init__(self, arquivo_config):
         super().__init__()
         self.arquivo = arquivo_config
-        self.pasta_resultado = None
+        self.resultado = None
         self.ocupado = False
         self.title(TITULO)
         self.resizable(False, False)
@@ -222,7 +290,8 @@ class Aplicativo(tk.Tk):
 
         rodape = ttk.Frame(quadro)
         rodape.grid(row=7, column=0, columnspan=2, sticky='we', pady=(12, 0))
-        self.botao_pasta = ttk.Button(rodape, text='Abrir pasta do relatório', command=self.abrir_pasta)
+        self.botao_ver = ttk.Button(rodape, text='Ver relatório', command=self.ver_relatorio)
+        self.botao_pasta = ttk.Button(rodape, text='Abrir pasta', command=self.abrir_pasta)
         self.botao_config = ttk.Button(rodape, text='Configurar banco...', command=self.configurar)
         self.botao_config.pack(side='right')
 
@@ -284,6 +353,7 @@ class Aplicativo(tk.Tk):
             return
 
         self.ocupar(True)
+        self.botao_ver.pack_forget()
         self.botao_pasta.pack_forget()
         self.status.config(text='')
         self.andamento.iniciar('Preparando...')
@@ -294,24 +364,27 @@ class Aplicativo(tk.Tk):
             if erro:
                 self.status.config(text='✖ O relatório não foi gerado.', foreground=COR_ERRO)
                 return mostrar_erro(self, erro)
-            self.pasta_resultado = resultado.arquivo.parent
+            self.resultado = resultado
             self.status.config(text='✔ ' + rd.formatar_resumo(resultado), foreground=COR_OK)
-            self.botao_pasta.pack(side='left')
-            if messagebox.askyesno(
-                TITULO,
-                f'Relatório gerado com sucesso em {rd.formatar_tempo(resultado.segundos)}.\n\n'
-                f'{resultado.arquivo.name}\n{resultado.linhas} linhas\n\nDeseja abrir a pasta do arquivo?',
-                parent=self,
-            ):
-                self.abrir_pasta()
+            self.botao_ver.pack(side='left')
+            self.botao_pasta.pack(side='left', padx=(6, 0))
+            self.ver_relatorio()  # abre o relatório logo após salvar
 
         em_segundo_plano(
             self, lambda avisar: rd.gerar(config, data_ini, data_fim, avisar), self.andamento.avancar, ao_terminar,
         )
 
+    def ver_relatorio(self):
+        if not self.resultado:
+            return
+        try:
+            VisualizadorRelatorio(self, self.resultado)
+        except OSError as e:
+            mostrar_erro(self, rd.ErroRelatorio(f'Não foi possível abrir {self.resultado.arquivo}.\n\nDetalhe: {e}'))
+
     def abrir_pasta(self):
-        if self.pasta_resultado:
-            abrir_pasta(self.pasta_resultado)
+        if self.resultado:
+            abrir_pasta(self.resultado.arquivo.parent)
 
 
 def main():
